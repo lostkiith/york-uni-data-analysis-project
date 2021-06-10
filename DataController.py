@@ -54,7 +54,7 @@ class DataController(object):
         try:
             data_frame = pd.read_json(file_name, convert_dates=True)
 
-            # break down to items of interest for general health
+            # break down to items of interest for general health and make column names readable.
             health = data_frame[
                 ['GENHLTH', 'PHYSHLTH', 'MENTHLTH', 'POORHLTH', '_HCVU651', 'PERSDOC2', 'MEDCOST', 'CHECKUP1',
                  '_RFHYPE5',
