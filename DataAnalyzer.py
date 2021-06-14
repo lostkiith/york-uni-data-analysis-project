@@ -12,7 +12,8 @@ def DataAnalyzer():
     depressive_disorder_logreg = DataController.Create_Logistic_Regression_Model(depressive_predictor)
 
     # prep the data for the k-mean cluster model
-    k_mean_clustering = DataController.clean_dataset_for_k_mean_clustering(df)
+    type_2_diabetes_predictor = DataController.prep_dataset_for_type_2_diabetes_predictor(df)
+    type_2_diabetes_predictor_svm = DataController.Create_SVM_Model(type_2_diabetes_predictor)
 
 
 def open_file():
