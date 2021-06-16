@@ -127,7 +127,7 @@ class DataController(object):
 
         # setup the test and training data.
         x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.35, random_state=42)
-        decision_tree = tree.DecisionTreeClassifier(random_state=1, max_depth=6, min_samples_leaf=1)
+        decision_tree = tree.DecisionTreeClassifier(random_state=1, max_depth=5, min_samples_leaf=1)
 
         decision_tree.fit(x_train, y_train)
 
