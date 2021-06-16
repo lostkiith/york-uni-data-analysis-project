@@ -1,15 +1,10 @@
-import numpy as np
-from matplotlib import pyplot as plt
-from sklearn.metrics import r2_score
-from sklearn.model_selection import train_test_split
-import sklearn as sklearn
-from sklearn.linear_model import LogisticRegression
-from sklearn import svm
-from numpy import mean
+import graphviz
 import pandas as pd
-import pymongo
-
-from pymongo.errors import ServerSelectionTimeoutError
+import sklearn as sklearn
+from numpy import mean
+from sklearn import tree
+from sklearn.model_selection import train_test_split
+from sklearn.svm import SVC
 
 
 class DataController(object):
@@ -27,27 +22,6 @@ class DataController(object):
             raise TypeError
         except ValueError:
             raise ValueError
-
-    @staticmethod
-    def replace_database_collection(file):
-        """" replaces the database collection if it exists with the new collection."""
-        client = pymongo.MongoClient("mongodb://localhost:27017/", serverSelectionTimeoutMS=1000)
-        try:
-            db = client["HealthData"]
-            db.drop()  # drops current collection
-            db.insert_many(file.reset_index().to_dict('records'))
-        except ServerSelectionTimeoutError as exc:
-            raise RuntimeError('Failed to open database') from exc
-
-    @staticmethod
-    def read_from_database(choice):
-        """" returns the data stored in the database by the file name."""
-        client = pymongo.MongoClient("mongodb://localhost:27017/", serverSelectionTimeoutMS=1000)
-        try:
-            db = client["HealthData"]
-            return pd.DataFrame(db.find({}, {'index': 0}))
-        except ServerSelectionTimeoutError as exc:
-            raise RuntimeError('Failed to open database') from exc
 
     @staticmethod
     def prep_data(file_name):
@@ -68,7 +42,7 @@ class DataController(object):
             health.rename(columns={'GENHLTH': 'general_health', 'PHYSHLTH': 'thinking_physical_health-30d',
                                    'MENTHLTH': 'thinking_mental_health-30d',
                                    'POORHLTH': 'mental/physical_health_impact-30d',
-                                   '_HCVU651': 'Health_Care_Access_18-64', 'PERSDOC2': 'personal_doctor',
+                                   '_HCVU651': 'Health_Care_Access_18-64', 'PERSDOC2': 'named_doctor',
                                    'MEDCOST': 'needed_medical_but_cost', 'CHECKUP1': 'last_check-up',
                                    '_RFHYPE5': 'high_blood_pressure', 'BPMEDS': 'high_blood_pressure_meds',
                                    '_CHOLCHK': 'blood_cholesterol_checked_within_5y',
@@ -80,7 +54,7 @@ class DataController(object):
                                    'HAVARTH3': 'arthritis_rheumatoid_arthritis_gout_lupus_fibromyalgia',
                                    'ADDEPEV2': 'depressive_disorder', 'CHCKIDNY': 'kidney_disease',
                                    'DIABETE3': 'have_diabetes', 'DIABAGE2': 'age_of_diabetes_onset',
-                                   'BLIND': 'are you blind', 'SEX': 'sex', 'AGE': 'age', '_BMI5CAT': 'BMI',
+                                   'BLIND': 'are you blind', 'SEX': 'sex', 'AGE': 'age', '_RFBMI5': 'Body Mass',
                                    '_EDUCAG': 'education_level', 'RENTHOM1': 'own/rent_your_home',
                                    'EMPLOY1': 'currently_employed', 'CHILDREN': 'children', '_INCOMG': 'income',
                                    '_SMOKER3': 'has_ever_smoked', '_RFDRHV5': "is_a_heavy_drinker",
@@ -96,8 +70,11 @@ class DataController(object):
                                    '_PASTRNG': 'do_they_meet_muscle_strengthening_recommendations'
                                    }, inplace=True)
 
-            # data_frame = data_frame.dropna()  # drops incomplete rows
-            # data_frame = data_frame.drop_duplicates()  # drops duplicate rows from dataframe.
+            # convert from continual
+            health['is_a_heavy_drinker'].replace({1: 'No', 2: 'Yes', 9: 'Refused'}, inplace=True)
+
+            for column in health.columns:
+                health.drop(index=health[health[column] == "Refused"].index, inplace=True)
 
             return health
         except TypeError as te:
@@ -109,17 +86,8 @@ class DataController(object):
     def prep_dataset_for_depressive_predictor(dataset):
         """" cleans the dataset for a depressive predictor."""
 
-        # drop responses that are not useful from depressive_disorder
-        dataset.drop(index=dataset[dataset['depressive_disorder'] == "Don't know/Not sure"].index, inplace=True)
-        dataset.drop(index=dataset[dataset['depressive_disorder'] == "Refused"].index, inplace=True)
-
         # One Hot Encoding of categorical data
         categorical = [var for var in dataset.columns if dataset[var].dtype == 'object']
-
-        # print("Number of categorical variables: ", len(categorical))
-        # print(categorical)
-        # for col in categorical:
-        # print(np.unique(health[col]))
 
         # creates new columns for each of the categorical options.
         health = pd.get_dummies(dataset, columns=categorical)
@@ -135,15 +103,9 @@ class DataController(object):
         # drop responses that are not useful from depressive_disorder
         dataset.drop('age_of_diabetes_onset', axis=1, inplace=True)
         dataset.drop(index=dataset[dataset['have_diabetes'] == "Don't know/Not sure"].index, inplace=True)
-        dataset.drop(index=dataset[dataset['have_diabetes'] == "Refused"].index, inplace=True)
 
         # One Hot Encoding of categorical data
         categorical = [var for var in dataset.columns if dataset[var].dtype == 'object']
-
-        # print("Number of categorical variables: ", len(categorical))
-        # print(categorical)
-        # for col in categorical:
-        # print(np.unique(health[col]))
 
         # creates new columns for each of the categorical options.
         health = pd.get_dummies(dataset, columns=categorical)
@@ -154,14 +116,8 @@ class DataController(object):
         return health
 
     @staticmethod
-    def clean_dataset_for_k_mean_clustering(dataset):
-        """" cleans the dataset for k-mean clustering."""
-
-        return dataset
-
-    @staticmethod
-    def Create_Logistic_Regression_Model(health):
-        # logistic regression on depressive_predictor
+    def Create_Decision_Tree_Model(health):
+        # Decision Tree classification on depressive_predictor
 
         # set x to all features
         x = health.loc[:, health.columns != 'depressive_disorder_Yes']
@@ -170,18 +126,30 @@ class DataController(object):
         y = health.depressive_disorder_Yes
 
         # setup the test and training data.
-        x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.25, random_state=42)
-        logreg = LogisticRegression(solver='liblinear')
-        logreg.fit(x_train, y_train)
-        logreg.max_iter = 10000
+        x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.45, random_state=42)
+        decision_tree = tree.DecisionTreeClassifier(random_state=0, max_depth=6, min_samples_leaf=1)
+
+        decision_tree.fit(x_train, y_train)
 
         # test the model using cross validation
         cross_val = sklearn.model_selection.KFold(n_splits=10, random_state=1, shuffle=True)
-        scores = sklearn.model_selection.cross_val_score(logreg, x, y, scoring='accuracy', cv=cross_val)
+        scores = sklearn.model_selection.cross_val_score(decision_tree, x, y, scoring='accuracy', cv=cross_val)
         average_score = mean(scores)
         print('Overall Accuracy:', average_score)
 
-        return logreg
+        classes = ["Yes", "no"]
+        health.drop('depressive_disorder_Yes', axis=1, inplace=True)
+
+        dot_data = tree.export_graphviz(decision_tree, out_file=None,
+                                        feature_names=health.columns,
+                                        class_names=classes,
+                                        filled=True, rounded=True,
+                                        special_characters=True)
+
+        graph = graphviz.Source(dot_data)
+        graph.render('depressive disorder decision tree')
+
+        return decision_tree
 
     @staticmethod
     def Create_SVM_Model(health):
@@ -195,13 +163,14 @@ class DataController(object):
 
         # setup the test and training data.
         x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.25, random_state=42)
-        SVC = svm.SVC()
-        SVC.fit(x_train, y_train)
+        svm = SVC(kernel='poly', cache_size=500)
+
+        svm.fit(x_train, y_train)
 
         # test the model using cross validation
         cross_val = sklearn.model_selection.KFold(n_splits=5, random_state=1, shuffle=True)
-        scores = sklearn.model_selection.cross_val_score(SVC, x, y, scoring='accuracy', cv=cross_val)
+        scores = sklearn.model_selection.cross_val_score(svm, x, y, scoring='accuracy', cv=cross_val)
         average_score = mean(scores)
         print('Overall Accuracy:', average_score)
 
-        return SVC
+        return svm
