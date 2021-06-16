@@ -1,7 +1,6 @@
-import matplotlib.pyplot as plt
-import numpy as np
-from DataController import DataController
 from tkinter.filedialog import askopenfilename
+
+from DataController import DataController
 
 
 def DataAnalyzer():
