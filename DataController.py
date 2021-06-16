@@ -126,8 +126,8 @@ class DataController(object):
         y = health.depressive_disorder_Yes
 
         # setup the test and training data.
-        x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.45, random_state=42)
-        decision_tree = tree.DecisionTreeClassifier(random_state=0, max_depth=6, min_samples_leaf=1)
+        x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.35, random_state=42)
+        decision_tree = tree.DecisionTreeClassifier(random_state=1, max_depth=6, min_samples_leaf=1)
 
         decision_tree.fit(x_train, y_train)
 
@@ -162,7 +162,7 @@ class DataController(object):
         y = health['have_diabetes_No, pre-diabetes or borderline diabetes']
 
         # setup the test and training data.
-        x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.25, random_state=42)
+        x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.35, random_state=42)
         svm = SVC(kernel='poly', cache_size=500)
 
         svm.fit(x_train, y_train)
