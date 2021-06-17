@@ -112,6 +112,7 @@ class DataController(object):
 
         health.drop('have_diabetes_Yes', axis=1, inplace=True)
         health.drop('have_diabetes_No', axis=1, inplace=True)
+        health.drop('have_diabetes_Yes, but female told only during pregnancy', axis=1, inplace=True)
 
         return health
 
