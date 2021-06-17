@@ -1,4 +1,5 @@
 import graphviz
+import numpy
 import pandas as pd
 import sklearn as sklearn
 from numpy import mean
@@ -137,6 +138,7 @@ class DataController(object):
         scores = sklearn.model_selection.cross_val_score(decision_tree, x, y, scoring='accuracy', cv=cross_val)
         average_score = mean(scores)
         print('Overall Accuracy:', average_score)
+        print('standard deviation:', numpy.std(scores))
 
         classes = ["Yes", "no"]
         health.drop('depressive_disorder_Yes', axis=1, inplace=True)
@@ -169,9 +171,10 @@ class DataController(object):
         svm.fit(x_train, y_train)
 
         # test the model using cross validation
-        cross_val = sklearn.model_selection.KFold(n_splits=5, random_state=1, shuffle=True)
+        cross_val = sklearn.model_selection.KFold(n_splits=10, random_state=1, shuffle=True)
         scores = sklearn.model_selection.cross_val_score(svm, x, y, scoring='accuracy', cv=cross_val)
         average_score = mean(scores)
         print('Overall Accuracy:', average_score)
+        print('standard deviation:', numpy.std(scores))
 
         return svm
