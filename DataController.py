@@ -1,11 +1,12 @@
 import graphviz
 import numpy
+import numpy as np
 import pandas as pd
 import sklearn as sklearn
-from numpy import mean
-from sklearn import tree
+from sklearn import tree, preprocessing
 from sklearn.model_selection import train_test_split
-from sklearn.svm import SVC
+from sklearn.svm import SVC, OneClassSVM
+from scipy import stats
 
 
 class DataController(object):
@@ -79,6 +80,12 @@ class DataController(object):
             for column in health.columns:
                 health.drop(index=health[health[column] == "Refused"].index, inplace=True)
 
+            # numeric outlier detection with z zscore
+            z = np.abs(stats.zscore(health._get_numeric_data()))
+            print(z)
+            health = health[(z < 3).all(axis=1)]
+            print(health.shape)
+
             return health
         except TypeError as te:
             raise TypeError(f"Must be a JSON file. {te}")
@@ -94,6 +101,19 @@ class DataController(object):
 
         # creates new columns for each of the categorical options.
         health = pd.get_dummies(dataset, columns=categorical)
+
+        x = health.loc[:, ]
+        clf = OneClassSVM(nu=0.15, kernel="poly", gamma='scale')
+        clf.fit(x)
+        print('Outlier Detection: ', numpy.std(clf.score_samples(x)))
+
+        i = 0
+        for test in clf.score_samples(x):
+            i = i+1
+            if test > 600 or test < 300:
+                print(i)
+                print(test)
+
 
         health.drop('depressive_disorder_No', axis=1, inplace=True)
 
@@ -138,10 +158,8 @@ class DataController(object):
         # test the model using cross validation
         cross_val = sklearn.model_selection.KFold(n_splits=10, random_state=1, shuffle=True)
         scores = sklearn.model_selection.cross_val_score(decision_tree, x, y, scoring='accuracy', cv=cross_val)
-        average_score = mean(scores)
         print('Decision Tree classification on depressive_predictor')
-        print('Overall Accuracy:', average_score)
-        print('standard deviation:', numpy.std(scores))
+        print("%0.2f accuracy with a standard deviation of %0.2f" % (scores.mean(), scores.std()))
 
         classes = ["Yes", "no"]
         health.drop('depressive_disorder_Yes', axis=1, inplace=True)
@@ -175,10 +193,8 @@ class DataController(object):
         # test the model using cross validation
         cross_val = sklearn.model_selection.KFold(n_splits=10, random_state=1, shuffle=True)
         scores = sklearn.model_selection.cross_val_score(svm, x, y, scoring='accuracy', cv=cross_val)
-        average_score = mean(scores)
         print('SVM on type_2_diabetes_predictor')
-        print('Overall Accuracy:', average_score)
-        print('standard deviation:', numpy.std(scores))
+        print("%0.2f accuracy with a standard deviation of %0.2f" % (scores.mean(), scores.std()))
 
         return svm
 
