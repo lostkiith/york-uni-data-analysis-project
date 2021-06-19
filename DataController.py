@@ -33,12 +33,12 @@ class DataController(object):
             # break down to items of interest for general health and make column names readable.
             health = data_frame[
                 ['GENHLTH', 'PHYSHLTH', 'MENTHLTH', 'POORHLTH', '_HCVU651', 'PERSDOC2', 'MEDCOST', 'CHECKUP1',
-                 '_RFHYPE5',
-                 'BPMEDS', '_CHOLCHK', '_RFCHOL', '_MICHD', 'CVDSTRK3', 'ASTHMA3',
+                 '_RFHYPE5', 'BPMEDS', '_CHOLCHK', '_RFCHOL', '_MICHD', 'CVDSTRK3', 'ASTHMA3',
                  'ASTHNOW', 'CHCSCNCR', 'CHCOCNCR', 'CHCCOPD1', 'HAVARTH3', 'ADDEPEV2', 'CHCKIDNY',
                  'DIABETE3', 'DIABAGE2', 'BLIND', 'SEX', 'AGE', '_RFBMI5', 'MARITAL', '_EDUCAG', 'RENTHOM1', 'EMPLOY1',
                  'CHILDREN', '_INCOMG', 'QLACTLM2', 'USEEQUIP', 'DECIDE', 'DIFFWALK',
-                 '_SMOKER3', '_RFDRHV5', 'DIFFDRES', 'DIFFALON', 'EXERANY2', 'EXRACT11', '_PAINDX1', '_PASTRNG']]
+                 '_SMOKER3', '_RFDRHV5', 'DIFFDRES', 'DIFFALON', 'EXERANY2', 'EXRACT11', '_PAINDX1', '_PASTRNG',
+                 '_VEG23', '_VEGLT1']]
 
             health.rename(columns={'GENHLTH': 'general_health', 'PHYSHLTH': 'thinking_physical_health-30d',
                                    'MENTHLTH': 'thinking_mental_health-30d',
@@ -55,7 +55,7 @@ class DataController(object):
                                    'HAVARTH3': 'arthritis_rheumatoid_arthritis_gout_lupus_fibromyalgia',
                                    'ADDEPEV2': 'depressive_disorder', 'CHCKIDNY': 'kidney_disease',
                                    'DIABETE3': 'have_diabetes', 'DIABAGE2': 'age_of_diabetes_onset',
-                                   'BLIND': 'are you blind', 'SEX': 'sex', 'AGE': 'age', '_RFBMI5': 'Body Mass',
+                                   'BLIND': 'are you blind', 'SEX': 'sex', 'AGE': 'age', '_RFBMI5': 'Body_Mass',
                                    '_EDUCAG': 'education_level', 'RENTHOM1': 'own/rent_your_home',
                                    'EMPLOY1': 'currently_employed', 'CHILDREN': 'children', '_INCOMG': 'income',
                                    '_SMOKER3': 'has_ever_smoked', '_RFDRHV5': "is_a_heavy_drinker",
@@ -68,7 +68,9 @@ class DataController(object):
                                    'EXERANY2': 'past_month_participate_in_physical_activities',
                                    'EXRACT11': 'type_of_physical_activity',
                                    '_PAINDX1': 'do_they_Meet_Aerobic_Recommendations',
-                                   '_PASTRNG': 'do_they_meet_muscle_strengthening_recommendations'
+                                   '_PASTRNG': 'do_they_meet_muscle_strengthening_recommendations',
+                                   '_VEG23': 'out_of_range_value_for_vegetables',
+                                   '_VEGLT1': 'vegetables_1_or_more_times_per_day',
                                    }, inplace=True)
 
             # convert from continual
@@ -137,6 +139,7 @@ class DataController(object):
         cross_val = sklearn.model_selection.KFold(n_splits=10, random_state=1, shuffle=True)
         scores = sklearn.model_selection.cross_val_score(decision_tree, x, y, scoring='accuracy', cv=cross_val)
         average_score = mean(scores)
+        print('Decision Tree classification on depressive_predictor')
         print('Overall Accuracy:', average_score)
         print('standard deviation:', numpy.std(scores))
 
@@ -167,14 +170,15 @@ class DataController(object):
         # setup the test and training data.
         x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.35, random_state=42)
         svm = SVC(kernel='poly', cache_size=500)
-
         svm.fit(x_train, y_train)
 
         # test the model using cross validation
         cross_val = sklearn.model_selection.KFold(n_splits=10, random_state=1, shuffle=True)
         scores = sklearn.model_selection.cross_val_score(svm, x, y, scoring='accuracy', cv=cross_val)
         average_score = mean(scores)
+        print('SVM on type_2_diabetes_predictor')
         print('Overall Accuracy:', average_score)
         print('standard deviation:', numpy.std(scores))
 
         return svm
+
