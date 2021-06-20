@@ -1,12 +1,12 @@
 import graphviz
-import numpy
 import numpy as np
 import pandas as pd
 import sklearn as sklearn
-from sklearn import tree, preprocessing
-from sklearn.model_selection import train_test_split
-from sklearn.svm import SVC, OneClassSVM
 from scipy import stats
+from sklearn import tree
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.svm import SVC
 
 
 class DataController(object):
@@ -101,20 +101,6 @@ class DataController(object):
 
         # creates new columns for each of the categorical options.
         health = pd.get_dummies(dataset, columns=categorical)
-
-        x = health.loc[:, ]
-        clf = OneClassSVM(nu=0.15, kernel="poly", gamma='scale')
-        clf.fit(x)
-        print('Outlier Detection: ', numpy.std(clf.score_samples(x)))
-
-        i = 0
-        for test in clf.score_samples(x):
-            i = i+1
-            if test > 600 or test < 300:
-                print(i)
-                print(test)
-
-
         health.drop('depressive_disorder_No', axis=1, inplace=True)
 
         return health
@@ -140,6 +126,23 @@ class DataController(object):
         return health
 
     @staticmethod
+    def prep_dataset_for_heart_disease(dataset):
+        """" cleans the dataset for a heart disease."""
+
+        # drop responses that are not useful from heart_disease
+        dataset.drop(index=dataset[dataset['have_had_heart_attack/heart_disease']
+                                   == "Not asked or Missing"].index, inplace=True)
+
+        # One Hot Encoding of categorical data
+        categorical = [var for var in dataset.columns if dataset[var].dtype == 'object']
+
+        # creates new columns for each of the categorical options.
+        health = pd.get_dummies(dataset, columns=categorical)
+        health.drop('have_had_heart_attack/heart_disease_Did not report having MI or CHD', axis=1, inplace=True)
+
+        return health
+
+    @staticmethod
     def Create_Decision_Tree_Model(health):
         # Decision Tree classification on depressive_predictor
 
@@ -151,27 +154,16 @@ class DataController(object):
 
         # setup the test and training data.
         x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.35, random_state=42)
-        decision_tree = tree.DecisionTreeClassifier(random_state=1, max_depth=5, min_samples_leaf=1)
+        decision_tree = tree.DecisionTreeClassifier(random_state=1, max_depth=6, min_samples_leaf=1)
 
         decision_tree.fit(x_train, y_train)
 
         # test the model using cross validation
-        cross_val = sklearn.model_selection.KFold(n_splits=10, random_state=1, shuffle=True)
-        scores = sklearn.model_selection.cross_val_score(decision_tree, x, y, scoring='accuracy', cv=cross_val)
         print('Decision Tree classification on depressive_predictor')
-        print("%0.2f accuracy with a standard deviation of %0.2f" % (scores.mean(), scores.std()))
+        DataController.Cross_Val_Score(decision_tree, x, y)
 
-        classes = ["Yes", "no"]
         health.drop('depressive_disorder_Yes', axis=1, inplace=True)
-
-        dot_data = tree.export_graphviz(decision_tree, out_file=None,
-                                        feature_names=health.columns,
-                                        class_names=classes,
-                                        filled=True, rounded=True,
-                                        special_characters=True)
-
-        graph = graphviz.Source(dot_data)
-        graph.render('depressive disorder decision tree')
+        DataController.Create_Decision_Tree(decision_tree, health, 'depressive disorder decision tree')
 
         return decision_tree
 
@@ -191,10 +183,50 @@ class DataController(object):
         svm.fit(x_train, y_train)
 
         # test the model using cross validation
-        cross_val = sklearn.model_selection.KFold(n_splits=10, random_state=1, shuffle=True)
-        scores = sklearn.model_selection.cross_val_score(svm, x, y, scoring='accuracy', cv=cross_val)
         print('SVM on type_2_diabetes_predictor')
-        print("%0.2f accuracy with a standard deviation of %0.2f" % (scores.mean(), scores.std()))
+        DataController.Cross_Val_Score(svm, x, y)
 
         return svm
 
+    @staticmethod
+    def Create_Forests_Model(health):
+        # Forests on heart-disease
+
+        # set x to all features
+        x = health.loc[:, health.columns != 'have_had_heart_attack/heart_disease_Did report having MI or CHD']
+
+        # set y to target have_diabetes_No, pre-diabetes or borderline diabetes
+        y = health['have_had_heart_attack/heart_disease_Reported having MI or CHD']
+
+        # setup the test and training data.
+        x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.35, random_state=42)
+        forest = RandomForestClassifier(max_depth=6, min_samples_leaf=1, random_state=0)
+        forest.fit(x_train, y_train)
+
+        # test the model using cross validation
+        print('RandomForest on heart-disease predictor')
+        DataController.Cross_Val_Score(forest, x, y)
+        print('number of tree created for model')
+        print(len(forest.estimators_))
+
+        model = forest.estimators_[0]
+        DataController.Create_Decision_Tree(model, health, 'heart-disease decision tree')
+
+        return forest
+
+    @staticmethod
+    def Create_Decision_Tree(model, health, title):
+        classes = ["Yes", "no"]
+        dot_data = tree.export_graphviz(model, out_file=None,
+                                        feature_names=health.columns,
+                                        class_names=classes,
+                                        filled=True, rounded=True,
+                                        special_characters=True)
+        graph = graphviz.Source(dot_data)
+        graph.render(title)
+
+    @staticmethod
+    def Cross_Val_Score(model, x, y):
+        cross_val = sklearn.model_selection.KFold(n_splits=10, random_state=1, shuffle=True)
+        scores = sklearn.model_selection.cross_val_score(model, x, y, scoring='accuracy', cv=cross_val)
+        print("%0.2f accuracy with a standard deviation of %0.2f" % (scores.mean(), scores.std()))
