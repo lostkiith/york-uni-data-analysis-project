@@ -1,3 +1,5 @@
+from collections import Counter
+
 import graphviz
 import numpy as np
 import pandas as pd
@@ -5,7 +7,13 @@ import sklearn as sklearn
 from scipy import stats
 from sklearn import tree
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression, LogisticRegression
+from sklearn.metrics import mean_absolute_error, mean_squared_error, recall_score, f1_score, balanced_accuracy_score, \
+    classification_report
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.naive_bayes import GaussianNB, ComplementNB
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 
 
@@ -77,6 +85,7 @@ class DataController(object):
             # convert from continual
             health['is_a_heavy_drinker'].replace({1: 'No', 2: 'Yes', 9: 'Refused'}, inplace=True)
 
+            # remove any rows with refused from the data
             for column in health.columns:
                 health.drop(index=health[health[column] == "Refused"].index, inplace=True)
 
@@ -84,7 +93,6 @@ class DataController(object):
             z = np.abs(stats.zscore(health._get_numeric_data()))
             print(z)
             health = health[(z < 3).all(axis=1)]
-            print(health.shape)
 
             return health
         except TypeError as te:
@@ -111,7 +119,13 @@ class DataController(object):
 
         # drop responses that are not useful from depressive_disorder
         dataset.drop('age_of_diabetes_onset', axis=1, inplace=True)
-        dataset.drop(index=dataset[dataset['have_diabetes'] == "Don't know/Not sure"].index, inplace=True)
+        dataset.drop('MARITAL', axis=1, inplace=True)
+        dataset.drop('children', axis=1, inplace=True)
+        dataset.drop('income', axis=1, inplace=True)
+
+        dataset.drop(index=dataset[dataset['have_diabetes'] == "Don't know/Not Sure"].index, inplace=True)
+        dataset.drop(index=dataset[dataset['have_diabetes'] ==
+                                   "Yes, but female told only during pregnancy"].index, inplace=True)
 
         # One Hot Encoding of categorical data
         categorical = [var for var in dataset.columns if dataset[var].dtype == 'object']
@@ -121,17 +135,19 @@ class DataController(object):
 
         health.drop('have_diabetes_Yes', axis=1, inplace=True)
         health.drop('have_diabetes_No', axis=1, inplace=True)
-        health.drop('have_diabetes_Yes, but female told only during pregnancy', axis=1, inplace=True)
 
         return health
 
     @staticmethod
-    def prep_dataset_for_heart_disease(dataset):
+    def prep_dataset_for_heart_disease_predictor(dataset):
         """" cleans the dataset for a heart disease."""
 
         # drop responses that are not useful from heart_disease
         dataset.drop(index=dataset[dataset['have_had_heart_attack/heart_disease']
                                    == "Not asked or Missing"].index, inplace=True)
+        dataset.drop('MARITAL', axis=1, inplace=True)
+        dataset.drop('children', axis=1, inplace=True)
+        dataset.drop('income', axis=1, inplace=True)
 
         # One Hot Encoding of categorical data
         categorical = [var for var in dataset.columns if dataset[var].dtype == 'object']
@@ -153,23 +169,25 @@ class DataController(object):
         y = health.depressive_disorder_Yes
 
         # setup the test and training data.
-        x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.35, random_state=42)
-        decision_tree = tree.DecisionTreeClassifier(random_state=1, max_depth=6, min_samples_leaf=1)
+        x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.25, random_state=42)
+        decision_tree = tree.DecisionTreeClassifier(random_state=1, max_depth=6)
 
         decision_tree.fit(x_train, y_train)
+        classes = ["depressive disorder", "no depressive disorder"]
 
         # test the model using cross validation
         print('Decision Tree classification on depressive_predictor')
-        DataController.Cross_Val_Score(decision_tree, x, y)
+        DataController.Cross_Val_Score(decision_tree, x, y, x_test, y_test, classes)
 
         health.drop('depressive_disorder_Yes', axis=1, inplace=True)
-        DataController.Create_Decision_Tree(decision_tree, health, 'depressive disorder decision tree')
+        classes = ["depressive disorder", "no depressive disorder"]
+        DataController.Create_Decision_Tree(decision_tree, health, classes, 'depressive disorder decision tree')
 
         return decision_tree
 
     @staticmethod
-    def Create_SVM_Model(health):
-        # SVM on type_2_diabetes_predictor
+    def Create_ComplementNB_Model(health):
+        # ComplementNB on type_2_diabetes_predictor
 
         # set x to all features
         x = health.loc[:, health.columns != 'have_diabetes_No, pre-diabetes or borderline diabetes']
@@ -178,15 +196,17 @@ class DataController(object):
         y = health['have_diabetes_No, pre-diabetes or borderline diabetes']
 
         # setup the test and training data.
-        x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.35, random_state=42)
-        svm = SVC(kernel='poly', cache_size=500)
-        svm.fit(x_train, y_train)
+        x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.40, random_state=0)
+        naive_bayes = ComplementNB()
+
+        naive_bayes.fit(x_train, y_train)
+        classes = ["pre-diabetes or borderline diabetes", "not pre-diabetic"]
 
         # test the model using cross validation
-        print('SVM on type_2_diabetes_predictor')
-        DataController.Cross_Val_Score(svm, x, y)
+        print('naive bayes on type_2_diabetes_predictor')
+        DataController.Cross_Val_Score(naive_bayes, x, y, x_test, y_test, classes)
 
-        return svm
+        return naive_bayes
 
     @staticmethod
     def Create_Forests_Model(health):
@@ -195,28 +215,29 @@ class DataController(object):
         # set x to all features
         x = health.loc[:, health.columns != 'have_had_heart_attack/heart_disease_Did report having MI or CHD']
 
-        # set y to target have_diabetes_No, pre-diabetes or borderline diabetes
+        # set y to target have_had_heart_attack/heart_disease_Reported having MI or CHD
         y = health['have_had_heart_attack/heart_disease_Reported having MI or CHD']
 
         # setup the test and training data.
-        x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.35, random_state=42)
-        forest = RandomForestClassifier(max_depth=6, min_samples_leaf=1, random_state=0)
+        x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.25, random_state=42)
+        forest = RandomForestClassifier(max_depth=6, random_state=1)
         forest.fit(x_train, y_train)
+        classes = ["Reported MI/CHD", "no Reported MI/CHD"]
 
         # test the model using cross validation
         print('RandomForest on heart-disease predictor')
-        DataController.Cross_Val_Score(forest, x, y)
+        DataController.Cross_Val_Score(forest, x, y, x_test, y_test, classes)
         print('number of tree created for model')
         print(len(forest.estimators_))
 
         model = forest.estimators_[0]
-        DataController.Create_Decision_Tree(model, health, 'heart-disease decision tree')
+        DataController.Create_Decision_Tree(model, health, classes, 'heart-disease decision tree')
 
         return forest
 
     @staticmethod
-    def Create_Decision_Tree(model, health, title):
-        classes = ["Yes", "no"]
+    def Create_Decision_Tree(model, health, classes, title):
+
         dot_data = tree.export_graphviz(model, out_file=None,
                                         feature_names=health.columns,
                                         class_names=classes,
@@ -226,7 +247,11 @@ class DataController(object):
         graph.render(title)
 
     @staticmethod
-    def Cross_Val_Score(model, x, y):
+    def Cross_Val_Score(model, x, y, x_test, y_test, classes):
+        y_pred = model.predict(x_test)
         cross_val = sklearn.model_selection.KFold(n_splits=10, random_state=1, shuffle=True)
         scores = sklearn.model_selection.cross_val_score(model, x, y, scoring='accuracy', cv=cross_val)
         print("%0.2f accuracy with a standard deviation of %0.2f" % (scores.mean(), scores.std()))
+        print("%0.2f mean squared error" % mean_squared_error(y_test, y_pred))
+        print("%0.2f mean absolute error" % mean_absolute_error(y_test, y_pred))
+        print(classification_report(y_test, y_pred, target_names=classes))
