@@ -7,9 +7,10 @@ import sklearn as sklearn
 from scipy import stats
 from sklearn import tree
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.feature_selection import SelectKBest, f_classif, chi2
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.metrics import mean_absolute_error, mean_squared_error, recall_score, f1_score, balanced_accuracy_score, \
-    classification_report
+    classification_report, roc_auc_score
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.naive_bayes import GaussianNB, ComplementNB
 from sklearn.pipeline import make_pipeline
@@ -124,8 +125,11 @@ class DataController(object):
         dataset.drop('income', axis=1, inplace=True)
 
         dataset.drop(index=dataset[dataset['have_diabetes'] == "Don't know/Not Sure"].index, inplace=True)
-        dataset.drop(index=dataset[dataset['have_diabetes'] ==
-                                   "Yes, but female told only during pregnancy"].index, inplace=True)
+        dataset.drop(index=dataset[dataset['have_diabetes'] == "Yes, but female told only during pregnancy"]
+                     .index, inplace=True)
+        #dataset['have_diabetes'].replace({'No': 0, 'No, pre-diabetes or borderline diabetes': 1}, inplace=True)
+        dataset.drop(index=dataset[dataset['have_diabetes'] == "Yes"].index, inplace=True)
+        #dataset.drop(index=dataset[dataset['have_diabetes'] == "No"].index, inplace=True)
 
         # One Hot Encoding of categorical data
         categorical = [var for var in dataset.columns if dataset[var].dtype == 'object']
@@ -133,8 +137,8 @@ class DataController(object):
         # creates new columns for each of the categorical options.
         health = pd.get_dummies(dataset, columns=categorical)
 
-        health.drop('have_diabetes_Yes', axis=1, inplace=True)
         health.drop('have_diabetes_No', axis=1, inplace=True)
+        #health.drop('have_diabetes_Yes', axis=1, inplace=True)
 
         return health
 
@@ -169,9 +173,8 @@ class DataController(object):
         y = health.depressive_disorder_Yes
 
         # setup the test and training data.
-        x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.25, random_state=42)
-        decision_tree = tree.DecisionTreeClassifier(random_state=1, max_depth=6)
-
+        x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.35, random_state=42)
+        decision_tree = tree.DecisionTreeClassifier(random_state=1, max_depth=15, min_samples_leaf=1,)
         decision_tree.fit(x_train, y_train)
         classes = ["depressive disorder", "no depressive disorder"]
 
@@ -196,7 +199,7 @@ class DataController(object):
         y = health['have_diabetes_No, pre-diabetes or borderline diabetes']
 
         # setup the test and training data.
-        x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.40, random_state=0)
+        x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.35, random_state=42)
         naive_bayes = ComplementNB()
 
         naive_bayes.fit(x_train, y_train)
@@ -219,8 +222,8 @@ class DataController(object):
         y = health['have_had_heart_attack/heart_disease_Reported having MI or CHD']
 
         # setup the test and training data.
-        x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.25, random_state=42)
-        forest = RandomForestClassifier(max_depth=6, random_state=1)
+        x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.35, random_state=42)
+        forest = RandomForestClassifier(max_depth=15, random_state=1)
         forest.fit(x_train, y_train)
         classes = ["Reported MI/CHD", "no Reported MI/CHD"]
 
@@ -252,6 +255,5 @@ class DataController(object):
         cross_val = sklearn.model_selection.KFold(n_splits=10, random_state=1, shuffle=True)
         scores = sklearn.model_selection.cross_val_score(model, x, y, scoring='accuracy', cv=cross_val)
         print("%0.2f accuracy with a standard deviation of %0.2f" % (scores.mean(), scores.std()))
-        print("%0.2f mean squared error" % mean_squared_error(y_test, y_pred))
-        print("%0.2f mean absolute error" % mean_absolute_error(y_test, y_pred))
+        print("%0.2f roc auc score" % roc_auc_score(y_test, y_pred))
         print(classification_report(y_test, y_pred, target_names=classes))

@@ -1,9 +1,9 @@
 digraph Tree {
 node [shape=box, style="filled, rounded", color="black", fontname=helvetica] ;
 edge [fontname=helvetica] ;
-0 [label=<have_had_heart_attack/heart_disease_Reported having MI or CHD &le; 0.5<br/>gini = 0.137<br/>samples = 4885<br/>value = [7152, 570]<br/>class = Reported MI/CHD>, fillcolor="#e78b49"] ;
-1 [label=<gini = 0.0<br/>samples = 4518<br/>value = [7152, 0]<br/>class = Reported MI/CHD>, fillcolor="#e58139"] ;
+0 [label=<have_had_heart_attack/heart_disease_Reported having MI or CHD &le; 0.5<br/>gini = 0.147<br/>samples = 4230<br/>value = [6157, 535]<br/>class = Reported MI/CHD>, fillcolor="#e78c4a"] ;
+1 [label=<gini = 0.0<br/>samples = 3900<br/>value = [6157, 0]<br/>class = Reported MI/CHD>, fillcolor="#e58139"] ;
 0 -> 1 [labeldistance=2.5, labelangle=45, headlabel="True"] ;
-2 [label=<gini = 0.0<br/>samples = 367<br/>value = [0, 570]<br/>class = no Reported MI/CHD>, fillcolor="#399de5"] ;
+2 [label=<gini = 0.0<br/>samples = 330<br/>value = [0, 535]<br/>class = no Reported MI/CHD>, fillcolor="#399de5"] ;
 0 -> 2 [labeldistance=2.5, labelangle=-45, headlabel="False"] ;
 }
