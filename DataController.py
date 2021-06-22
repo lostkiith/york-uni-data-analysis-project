@@ -1,12 +1,13 @@
 import graphviz
+import imblearn
 import numpy as np
 import pandas as pd
 import sklearn as sklearn
 from scipy import stats
 from sklearn import tree
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import roc_auc_score, confusion_matrix
-from sklearn.model_selection import train_test_split, cross_validate
+from sklearn.metrics import confusion_matrix
+from sklearn.model_selection import train_test_split, RepeatedStratifiedKFold, GridSearchCV
 from sklearn.naive_bayes import ComplementNB
 
 
@@ -119,9 +120,11 @@ class DataController(object):
         # setup the test and training data.
         x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.25, random_state=42, stratify=y)
         decision_tree = tree.DecisionTreeClassifier(random_state=1, max_depth=15, min_samples_leaf=1,
-                                                    class_weight='balanced')
+                                                    class_weight={0: 5000, 1: 0.2})
         cross_val = sklearn.model_selection.StratifiedKFold(n_splits=10, random_state=1, shuffle=True)
         decision_tree.fit(x_train, y_train)
+
+        # DataController.tree_weight_testing(decision_tree, x, y)
 
         # test the model using cross validation
         print('decision_tree on depressive_predictor')
@@ -187,7 +190,6 @@ class DataController(object):
         print('naive_bayes on type_2_diabetes_predictor')
         DataController.model_testing(cross_val, naive_bayes, x, x_test, y, y_test)
 
-
         return naive_bayes
 
     @staticmethod
@@ -226,8 +228,9 @@ class DataController(object):
         # setup the test and training data.
         x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.25, random_state=42, stratify=y)
         cross_val = sklearn.model_selection.StratifiedKFold(n_splits=10, random_state=1, shuffle=True)
-        forest = RandomForestClassifier(random_state=1, max_features='sqrt', n_estimators=200, class_weight={1: 100},
-                                        max_depth=15, min_samples_leaf=1)
+        # forest = RandomForestClassifier(random_state=1, max_features='sqrt', n_estimators=10, class_weight={1: 100},
+        #     max_depth=20, min_samples_leaf=1)
+        forest = imblearn.ensemble.EasyEnsembleClassifier(n_estimators=50, n_jobs=-1)
         forest.fit(x_train, y_train)
         classes = ["Reported MI/CHD", "no Reported MI/CHD"]
 
@@ -268,3 +271,23 @@ class DataController(object):
         cm = confusion_matrix(y, y_pred)
         return {'tn': cm[0, 0], 'fp': cm[0, 1],
                 'fn': cm[1, 0], 'tp': cm[1, 1]}
+
+    @staticmethod
+    def tree_weight_testing(decision_tree, x, y):
+        balance = ['balanced', {0: 8000, 1: .5}, {0: 8500, 1: .6}, {0: 5000, 1: .2}, {0: 1000, 1: 1}, {0: 100, 1: .5},
+                   {0: 100, 1: 1}]
+        param_grid = dict(class_weight=balance)
+        # define evaluation procedure
+        cv = RepeatedStratifiedKFold(n_splits=10, n_repeats=3, random_state=1)
+        # define grid search
+        grid = GridSearchCV(estimator=decision_tree, param_grid=param_grid, n_jobs=-1, cv=cv, scoring='roc_auc')
+        # execute the grid search
+        grid_result = grid.fit(x, y)
+        # report the best configuration
+        print("Best: %f using %s" % (grid_result.best_score_, grid_result.best_params_))
+        # report all configurations
+        means = grid_result.cv_results_['mean_test_score']
+        stds = grid_result.cv_results_['std_test_score']
+        params = grid_result.cv_results_['params']
+        for mean, stdev, param in zip(means, stds, params):
+            print("%f (%f) with: %r" % (mean, stdev, param))
