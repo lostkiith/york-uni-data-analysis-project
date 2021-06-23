@@ -3,10 +3,10 @@ import imblearn
 import numpy as np
 import pandas as pd
 import sklearn as sklearn
+from matplotlib import pyplot as plt
 from scipy import stats
 from sklearn import tree
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, plot_roc_curve
 from sklearn.model_selection import train_test_split, RepeatedStratifiedKFold, GridSearchCV
 from sklearn.naive_bayes import ComplementNB
 
@@ -120,15 +120,14 @@ class DataController(object):
         # setup the test and training data.
         x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.25, random_state=42, stratify=y)
         decision_tree = tree.DecisionTreeClassifier(random_state=1, max_depth=15, min_samples_leaf=1,
-                                                    class_weight={0: 5000, 1: 0.2})
-        cross_val = sklearn.model_selection.StratifiedKFold(n_splits=10, random_state=1, shuffle=True)
+                                                    class_weight={0: 100, 1: 0.5})
         decision_tree.fit(x_train, y_train)
 
         # DataController.tree_weight_testing(decision_tree, x, y)
 
         # test the model using cross validation
         print('decision_tree on depressive_predictor')
-        DataController.model_testing(cross_val, decision_tree, x, x_test, y, y_test)
+        DataController.model_testing(decision_tree, x, x_test, y, y_test)
 
         health.drop('depressive_disorder_Yes', axis=1, inplace=True)
         classes = ["depressive disorder", "no depressive disorder"]
@@ -179,7 +178,6 @@ class DataController(object):
 
         # setup the test and training data.
         x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.25, random_state=42, stratify=y)
-        cross_val = sklearn.model_selection.StratifiedKFold(n_splits=10, random_state=1, shuffle=True)
 
         naive_bayes = ComplementNB()
 
@@ -188,7 +186,7 @@ class DataController(object):
 
         # test the model using cross validation
         print('naive_bayes on type_2_diabetes_predictor')
-        DataController.model_testing(cross_val, naive_bayes, x, x_test, y, y_test)
+        DataController.model_testing(naive_bayes, x, x_test, y, y_test)
 
         return naive_bayes
 
@@ -227,32 +225,37 @@ class DataController(object):
 
         # setup the test and training data.
         x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.25, random_state=42, stratify=y)
-        cross_val = sklearn.model_selection.StratifiedKFold(n_splits=10, random_state=1, shuffle=True)
-        # forest = RandomForestClassifier(random_state=1, max_features='sqrt', n_estimators=10, class_weight={1: 100},
-        #     max_depth=20, min_samples_leaf=1)
-        forest = imblearn.ensemble.EasyEnsembleClassifier(n_estimators=50, n_jobs=-1)
+        forest = imblearn.ensemble.EasyEnsembleClassifier(n_estimators=100, n_jobs=-1)
         forest.fit(x_train, y_train)
         classes = ["Reported MI/CHD", "no Reported MI/CHD"]
 
         # test the model using cross validation
         print('forest on heart-disease')
-        DataController.model_testing(cross_val, forest, x, x_test, y, y_test)
-
-        model = forest.estimators_[0]
-        # DataController.Create_Decision_Tree(model, health, classes, 'heart-disease decision tree')
+        DataController.model_testing(forest, x, x_test, y, y_test)
 
         return forest
 
     @staticmethod
-    def model_testing(cross_val, forest, x, x_test, y, y_test):
-        scores = sklearn.model_selection.cross_val_score(forest, x, y, scoring='accuracy', cv=cross_val)
+    def model_testing(model, x, x_test, y, y_test):
+        cross_val = sklearn.model_selection.StratifiedKFold(n_splits=10, random_state=1, shuffle=True)
+        scores = sklearn.model_selection.cross_val_score(model, x, y, scoring='accuracy', cv=cross_val)
         print("%0.2f accuracy with a standard deviation of %0.2f" % (scores.mean(), scores.std()))
-        scores = sklearn.model_selection.cross_val_score(forest, x, y, scoring='roc_auc', cv=cross_val)
+        scores = sklearn.model_selection.cross_val_score(model, x, y, scoring='roc_auc', cv=cross_val)
         print("%0.2f roc auc score " % scores.mean())
-        y_pred = forest.predict(x_test)
+        y_pred = model.predict(x_test)
         cm = confusion_matrix(y_test, y_pred)
         tn, fp, fn, tp = cm.ravel()
         print(cm)
+        # print vis
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 8))
+        # confusion matrix
+        disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=model.classes_)
+        rfc_disp = plot_roc_curve(model, x_test, y_test, ax=ax2)
+        # plot two figs
+        disp.plot(ax=ax1)
+        rfc_disp.plot(ax=ax2)
+        # show
+        plt.show()
 
     @staticmethod
     def Create_Decision_Tree(model, health, classes, title):
@@ -261,7 +264,8 @@ class DataController(object):
                                         feature_names=health.columns,
                                         class_names=classes,
                                         filled=True, rounded=True,
-                                        special_characters=True)
+                                        special_characters=True,
+                                        max_depth=6)
         graph = graphviz.Source(dot_data)
         graph.render(title)
 
@@ -274,8 +278,9 @@ class DataController(object):
 
     @staticmethod
     def tree_weight_testing(decision_tree, x, y):
-        balance = ['balanced', {0: 8000, 1: .5}, {0: 8500, 1: .6}, {0: 5000, 1: .2}, {0: 1000, 1: 1}, {0: 100, 1: .5},
-                   {0: 100, 1: 1}]
+        balance = ['balanced', {0: 8600, 1: .5}, {0: 8600, 1: .5}, {0: 8500, 1: .6}, {0: 5000, 1: .2}, {0: 100, 1: .6},
+                   {0: 100, 1: .5},
+                   {0: 100, 1: .3}]
         param_grid = dict(class_weight=balance)
         # define evaluation procedure
         cv = RepeatedStratifiedKFold(n_splits=10, n_repeats=3, random_state=1)
