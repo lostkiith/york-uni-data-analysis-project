@@ -88,6 +88,8 @@ class DataController(object):
             print(z)
             health = health[(z < 3).all(axis=1)]
 
+            DataController.write_file("cleaned data", health, True)
+
             return health
         except TypeError as te:
             raise TypeError(f"Must be a JSON file. {te}")
@@ -110,6 +112,8 @@ class DataController(object):
     @staticmethod
     def Create_Decision_Tree_Model(health):
         # Decision Tree classification on depressive_predictor
+        file_name = "depressive_predictor"
+        DataController.write_file(file_name, health, False)
 
         # set x to all features
         x = health.loc[:, health.columns != 'depressive_disorder_Yes']
@@ -119,18 +123,22 @@ class DataController(object):
 
         # setup the test and training data.
         x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.25, random_state=42, stratify=y)
-        decision_tree = tree.DecisionTreeClassifier(random_state=1, max_depth=15, min_samples_leaf=1,
-                                                    class_weight={0: 100, 1: 0.5})
+        decision_tree = tree.DecisionTreeClassifier(random_state=1, min_samples_leaf=1, class_weight='balanced',
+                                                    max_depth=10)
         decision_tree.fit(x_train, y_train)
 
+        # testing tree
+        # decision_tree = tree.DecisionTreeClassifier(random_state=1, min_samples_leaf=1, max_depth=14)
+        # decision_tree.fit(x_train, y_train)
         # DataController.tree_weight_testing(decision_tree, x, y)
 
         # test the model using cross validation
         print('decision_tree on depressive_predictor')
-        DataController.model_testing(decision_tree, x, x_test, y, y_test)
+        classes = ["not depressive", "depressive"]
+        DataController.model_testing(decision_tree, x, x_test, y, y_test, classes)
 
         health.drop('depressive_disorder_Yes', axis=1, inplace=True)
-        classes = ["depressive disorder", "no depressive disorder"]
+
         DataController.Create_Decision_Tree(decision_tree, health, classes, 'depressive disorder decision tree')
 
         return decision_tree
@@ -170,6 +178,9 @@ class DataController(object):
     def Create_ComplementNB_Model(health):
         # ComplementNB on type_2_diabetes_predictor
 
+        file_name = "diabetes_predictor"
+        DataController.write_file(file_name, health, False)
+
         # set x to all features
         x = health.loc[:, health.columns != 'have_diabetes_No, pre-diabetes or borderline diabetes']
 
@@ -182,11 +193,11 @@ class DataController(object):
         naive_bayes = ComplementNB()
 
         naive_bayes.fit(x_train, y_train)
-        # classes = ["pre-diabetes or borderline diabetes", "not pre-diabetic"]
+        classes = ["not pre-diabetic", "pre-diabetes"]
 
         # test the model using cross validation
         print('naive_bayes on type_2_diabetes_predictor')
-        DataController.model_testing(naive_bayes, x, x_test, y, y_test)
+        DataController.model_testing(naive_bayes, x, x_test, y, y_test, classes)
 
         return naive_bayes
 
@@ -217,6 +228,9 @@ class DataController(object):
     def Create_Forests_Model(health):
         # Forests on heart-disease
 
+        file_name = "heart_disease"
+        DataController.write_file(file_name, health, False)
+
         # set x to all features
         x = health.loc[:, health.columns != 'have_had_heart_attack/heart_disease_Reported having MI or CHD']
 
@@ -225,23 +239,33 @@ class DataController(object):
 
         # setup the test and training data.
         x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.25, random_state=42, stratify=y)
-        forest = imblearn.ensemble.EasyEnsembleClassifier(n_estimators=100, n_jobs=-1)
+        forest = imblearn.ensemble.BalancedRandomForestClassifier(n_estimators=500, n_jobs=-1, random_state=1,
+                                                                  max_depth=10,
+                                                                  min_samples_leaf=1, class_weight='balanced_subsample')
+
+        # DataController.tree_weight_testing(forest, x, y)
         forest.fit(x_train, y_train)
-        classes = ["Reported MI/CHD", "no Reported MI/CHD"]
+        classes = ["no MI/CHD", "MI/CHD"]
 
         # test the model using cross validation
         print('forest on heart-disease')
-        DataController.model_testing(forest, x, x_test, y, y_test)
+        DataController.model_testing(forest, x, x_test, y, y_test, classes)
 
         return forest
 
     @staticmethod
-    def model_testing(model, x, x_test, y, y_test):
+    def model_testing(model, x, x_test, y, y_test, classes):
         cross_val = sklearn.model_selection.StratifiedKFold(n_splits=10, random_state=1, shuffle=True)
         scores = sklearn.model_selection.cross_val_score(model, x, y, scoring='accuracy', cv=cross_val)
         print("%0.2f accuracy with a standard deviation of %0.2f" % (scores.mean(), scores.std()))
         scores = sklearn.model_selection.cross_val_score(model, x, y, scoring='roc_auc', cv=cross_val)
         print("%0.2f roc auc score " % scores.mean())
+        scores = sklearn.model_selection.cross_val_score(model, x, y, scoring='precision', cv=cross_val)
+        print("%0.2f precision " % scores.mean())
+        scores = sklearn.model_selection.cross_val_score(model, x, y, scoring='recall', cv=cross_val)
+        print("%0.2f recall" % scores.mean())
+        scores = sklearn.model_selection.cross_val_score(model, x, y, scoring='f1', cv=cross_val)
+        print("%0.2f f1" % scores.mean())
         y_pred = model.predict(x_test)
         cm = confusion_matrix(y_test, y_pred)
         tn, fp, fn, tp = cm.ravel()
@@ -249,8 +273,9 @@ class DataController(object):
         # print vis
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 8))
         # confusion matrix
-        disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=model.classes_)
+        disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=classes)
         rfc_disp = plot_roc_curve(model, x_test, y_test, ax=ax2)
+
         # plot two figs
         disp.plot(ax=ax1)
         rfc_disp.plot(ax=ax2)
@@ -265,7 +290,7 @@ class DataController(object):
                                         class_names=classes,
                                         filled=True, rounded=True,
                                         special_characters=True,
-                                        max_depth=6)
+                                        max_depth=3)
         graph = graphviz.Source(dot_data)
         graph.render(title)
 
@@ -278,14 +303,14 @@ class DataController(object):
 
     @staticmethod
     def tree_weight_testing(decision_tree, x, y):
-        balance = ['balanced', {0: 8600, 1: .5}, {0: 8600, 1: .5}, {0: 8500, 1: .6}, {0: 5000, 1: .2}, {0: 100, 1: .6},
-                   {0: 100, 1: .5},
-                   {0: 100, 1: .3}]
+        balance = ['balanced', 'balanced_subsample', {0: 1000, 1: .2}, {0: 9000, 1: .3}, {0: 8600, 1: 5},
+                   {0: 8600, 1: .5}, {0: 8500, 1: .6},
+                   {0: 5000, 1: .2}, {0: 100, 1: .6}, {0: 100, 1: .5}, {0: 100, 1: .3}]
         param_grid = dict(class_weight=balance)
         # define evaluation procedure
         cv = RepeatedStratifiedKFold(n_splits=10, n_repeats=3, random_state=1)
         # define grid search
-        grid = GridSearchCV(estimator=decision_tree, param_grid=param_grid, n_jobs=-1, cv=cv, scoring='roc_auc')
+        grid = GridSearchCV(estimator=decision_tree, param_grid=param_grid, n_jobs=-1, cv=cv, scoring='f1')
         # execute the grid search
         grid_result = grid.fit(x, y)
         # report the best configuration
@@ -296,3 +321,10 @@ class DataController(object):
         params = grid_result.cv_results_['params']
         for mean, stdev, param in zip(means, stds, params):
             print("%f (%f) with: %r" % (mean, stdev, param))
+
+    @staticmethod
+    def write_file(file_name, health, index):
+        if not index:
+            health.to_csv(file_name + ".csv", encoding='utf-8')
+        else:
+            health.to_csv(file_name + ".csv", index=False, encoding='utf-8')
